@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ANEW 振込申請</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green:#16A34A; --green-deep:#15803D; --green-soft:#EAF8F0; --ink:#0F172A;
+    --muted:#6B7280; --line:#E8ECEA; --bg:#F5F8F6; --card:#fff; --amber:#C2410C;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans JP",-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px 80px}
+  /* ヘッダー */
+  header{position:sticky;top:0;z-index:50;background:rgba(245,248,246,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .hbar{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 16px}
+  .logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+  .logo b{font-family:"Zen Kaku Gothic New";font-weight:900;font-size:18px;color:var(--ink);letter-spacing:.5px}
+  .back{margin-left:auto;font-size:12.5px;font-weight:700;color:#fff;background:#1C3D2F;border-radius:999px;padding:7px 13px;text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+  h1.title{font-family:"Zen Kaku Gothic New";font-weight:900;font-size:22px;margin:18px 2px 2px}
+  .sub{font-size:12.5px;color:var(--muted);margin:0 2px 16px}
+  /* タブ */
+  .tabs{display:flex;gap:8px;margin-bottom:16px}
+  .tab{flex:1;padding:10px;border:1px solid var(--line);background:#fff;border-radius:12px;font-weight:700;font-size:13.5px;color:var(--muted);cursor:pointer}
+  .tab.on{background:var(--green-soft);border-color:#BBE7CC;color:var(--green-deep)}
+  /* カード */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:12px 0 5px}
+  input,select,textarea{width:100%;border:1px solid #D7DEDA;border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;background:#fff;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--green)}
+  textarea{min-height:70px;resize:vertical}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .btn{width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:16px}
+  .btn:disabled{background:#CBD5D0;cursor:not-allowed}
+  .btn.ghost{background:#fff;color:var(--green-deep);border:1px solid #BBE7CC}
+  .btn.sm{width:auto;padding:7px 12px;font-size:12.5px;margin:0}
+  /* アップロード */
+  .drop{border:2px dashed #C9D6CF;border-radius:14px;padding:20px;text-align:center;background:#FAFCFB;cursor:pointer}
+  .drop.on{border-color:var(--green);background:var(--green-soft)}
+  .drop .big{font-size:32px}
+  .ai{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--green-deep);background:var(--green-soft);border-radius:10px;padding:9px 12px;margin-top:10px}
+  .spin{width:15px;height:15px;border:2px solid #BBE7CC;border-top-color:var(--green);border-radius:50%;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .warn{font-size:11.5px;color:var(--amber);background:#FFF7ED;border:1px solid #FFE0C2;border-radius:10px;padding:9px 11px;margin-top:10px;line-height:1.6}
+  .note{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.6}
+  /* 申請カード */
+  .req{border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:11px;background:#fff}
+  .req .top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .amt{font-size:21px;font-weight:900;color:var(--ink)}
+  .badge{font-size:11px;font-weight:800;border-radius:999px;padding:4px 11px;white-space:nowrap}
+  .b-apply{background:#FEF3C7;color:#92400E}.b-check{background:#DBEAFE;color:#1D4ED8}.b-done{background:#D1FAE5;color:#047857}
+  .meta{font-size:12.5px;color:#374151;margin-top:7px;line-height:1.7}
+  .meta b{color:var(--ink)}
+  .pill{display:inline-block;font-size:11px;font-weight:700;color:var(--muted);background:#F3F4F6;border-radius:999px;padding:2px 9px;margin-right:6px}
+  .filter{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+  .filter button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer}
+  .filter button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .empty{text-align:center;color:#9CA3AF;font-size:13px;padding:30px 0}
+  /* 経理モード */
+  .keiri{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 14px;margin-bottom:14px;flex-wrap:wrap}
+  .keiri .t{font-size:13px;font-weight:800}
+  .switch{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted)}
+  /* トースト */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:999px;font-size:13.5px;font-weight:700;opacity:0;transition:opacity .25s;z-index:200;pointer-events:none}
+  #toast.show{opacity:1}
+  /* セットアップ */
+  .setup{background:#FFFBEB;border:1px solid #FDE68A;border-radius:14px;padding:16px;margin-bottom:16px}
+  .setup b{color:#92400E}
+  .gaslogo{flex-shrink:0}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <a class="logo" href="https://anew-shift.vercel.app/">
+      <svg class="gaslogo" width="26" height="26" viewBox="0 0 64 64"><path d="M32 6 L58 54 L6 54 Z" fill="none" stroke="#16A34A" stroke-width="5" stroke-linejoin="round"/><path d="M34 28 L48 52 L20 52 Z" fill="none" stroke="#16A34A" stroke-width="4" stroke-linejoin="round"/></svg>
+      <b>new</b>
+    </a>
+    <a class="back" href="https://anew-shift.vercel.app/">&larr; ANEWアプリに戻る</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <h1 class="title">振込申請</h1>
+  <p class="sub">請求書をアップロードするとAIが内容を自動入力します。金額・口座は必ずご確認のうえ申請してください。</p>
+
+  <div id="setup" class="setup" style="display:none">
+    <div style="font-size:13px;line-height:1.7"><b>初回設定：</b>このアプリのデータ保存先（GAS）のURLを貼り付けてください。一度設定すれば次回から不要です。</div>
+    <div class="row" style="margin-top:10px">
+      <input id="gasInput" placeholder="https://script.google.com/macros/s/.../exec" />
+    </div>
+    <button class="btn sm" style="margin-top:10px;background:#92400E" onclick="saveGas()">保存</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" id="tab-new" onclick="show('new')">申請する</button>
+    <button class="tab" id="tab-list" onclick="show('list')">申請状況</button>
+  </div>
+
+  <!-- 申請する -->
+  <section id="view-new">
+    <div class="card">
+      <label>請求書（画像・PDF）</label>
+      <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+        <div class="big">📄</div>
+        <div style="font-size:13.5px;font-weight:700;margin-top:6px">タップして請求書を選択</div>
+        <div class="note" style="margin-top:2px">写真でもOK。アップするとAIが自動で読み取ります</div>
+      </div>
+      <input type="file" id="file" accept="image/*,application/pdf" style="display:none" onchange="onFile(this)" />
+      <div id="aiStatus"></div>
+      <div id="fileLink"></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div><label>申請者</label><input id="requester" placeholder="お名前" /></div>
+        <div><label>事業部</label>
+          <select id="dept"><option>EC事業</option><option>古着事業</option><option>バルーン事業</option><option>その他</option></select>
+        </div>
+      </div>
+      <label>金額（円）</label><input id="amount" type="number" inputmode="numeric" placeholder="例：55000" />
+      <label>振込先 会社名</label><input id="payee" placeholder="例：株式会社〇〇" />
+      <label>銀行口座（銀行・支店・種別・番号・名義）</label><textarea id="bank" placeholder="例：〇〇銀行 △△支店 普通 1234567 カ）〇〇"></textarea>
+      <label>支払期日</label><input id="dueDate" type="date" />
+      <label>メモ（任意）</label><textarea id="memo" placeholder="件名・但し書きなど"></textarea>
+      <div class="warn">⚠ AIの読み取りは間違うことがあります。<b>金額と口座番号は必ず目で確認</b>してから申請してください。</div>
+      <button class="btn" id="submitBtn" onclick="submitReq()">この内容で申請する</button>
+    </div>
+  </section>
+
+  <!-- 申請状況 -->
+  <section id="view-list" style="display:none">
+    <div class="keiri">
+      <span class="t">🧾 経理メニュー</span>
+      <span class="note" style="margin:0">承認・振込処理は森田・谷中のみ</span>
+      <label class="switch" style="margin:0 0 0 auto">
+        <input type="checkbox" id="keiriToggle" style="width:auto" onchange="toggleKeiri()" /> 経理モード
+      </label>
+    </div>
+    <div id="keiriWho" style="display:none;margin:-6px 0 14px">
+      <select id="whoSelect" style="max-width:220px"><option value="森田 早貴">森田 早貴</option><option value="谷中 良平">谷中 良平</option></select>
+    </div>
+    <div class="filter" id="filter">
+      <button class="on" data-f="all" onclick="setFilter('all')">すべて</button>
+      <button data-f="申請中" onclick="setFilter('申請中')">申請中</button>
+      <button data-f="経理確認" onclick="setFilter('経理確認')">経理確認</button>
+      <button data-f="振込処理済" onclick="setFilter('振込処理済')">振込処理済</button>
+    </div>
+    <div id="reqList"><div class="empty">読み込み中…</div></div>
+  </section>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ====== 設定 ====== */
+const GAS_URL_BUILTIN = "https://script.google.com/macros/s/AKfycbzLEXlXeC8cw-4Z53QaNgYSi8sOtBWixTDA95ByrITICrJTcOR1Tunyylb0XSZyMzTKYA/exec"; // ここに固定URLを入れてもOK（空ならアプリ内で設定）
+const KEIRI_PIN = "2580";   // 経理モードの暗証番号（変更可）
+function gasUrl(){ return localStorage.getItem("furikomi_gas") || GAS_URL_BUILTIN; }
+function saveGas(){
+  const v=(document.getElementById("gasInput").value||"").trim();
+  if(!/^https:\/\/script\.google\.com\/.+\/exec$/.test(v)){ toast("URLの形式が違います（…/exec で終わるURL）"); return; }
+  localStorage.setItem("furikomi_gas", v); document.getElementById("setup").style.display="none"; toast("保存しました"); loadList();
+}
+
+/* ====== 状態 ====== */
+let pendingFileUrl = "", filterVal="all", keiri=false;
+
+/* ====== 表示切替 ====== */
+function show(v){
+  document.getElementById("view-new").style.display = v==="new"?"block":"none";
+  document.getElementById("view-list").style.display = v==="list"?"block":"none";
+  document.getElementById("tab-new").classList.toggle("on", v==="new");
+  document.getElementById("tab-list").classList.toggle("on", v==="list");
+  if(v==="list") loadList();
+  window.scrollTo(0,0);
+}
+function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
+
+/* ====== 画像縮小 ====== */
+function downscale(file){
+  return new Promise((resolve)=>{
+    if(file.type==="application/pdf"){ // PDFはそのまま
+      const r=new FileReader(); r.onload=()=>resolve({b64:r.result.split(",")[1],mime:file.type,name:file.name}); r.readAsDataURL(file); return;
+    }
+    const img=new Image(); const r=new FileReader();
+    r.onload=()=>{ img.onload=()=>{
+      const max=1600; let{width:w,height:h}=img;
+      if(w>max||h>max){ const s=max/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+      const c=document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      const url=c.toDataURL("image/jpeg",0.82);
+      resolve({b64:url.split(",")[1],mime:"image/jpeg",name:(file.name||"invoice")+".jpg"});
+    }; img.src=r.result; };
+    r.readAsDataURL(file);
+  });
+}
+
+/* ====== ファイル選択 → 保存＆AI読み取り ====== */
+async function onFile(input){
+  const f=input.files[0]; if(!f) return;
+  if(!gasUrl()){ document.getElementById("setup").style.display="block"; toast("先にGAS URLを設定してください"); return; }
+  const ai=document.getElementById("aiStatus");
+  ai.innerHTML='<div class="ai"><span class="spin"></span>請求書を保存して、AIが読み取り中…（10〜20秒）</div>';
+  pendingFileUrl="";
+  const id="X"+Date.now()+Math.floor(Math.random()*1000);
+  const {b64,mime,name}=await downscale(f);
+  // 送信（no-cors：レスポンスは読めないので後でポーリング）
+  try{
+    await fetch(gasUrl(),{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"extract",id,image:b64,mime,filename:name})});
+  }catch(e){}
+  // ポーリング
+  let tries=0; const poll=setInterval(async()=>{
+    tries++;
+    try{
+      const r=await fetch(gasUrl()+"?action=extractResult&id="+id);
+      const d=await r.json();
+      if(d&&d.ready){
+        clearInterval(poll);
+        const res=d.result||{}; const data=res.data||{};
+        pendingFileUrl=res.fileUrl||"";
+        if(data.amount) document.getElementById("amount").value=String(data.amount).replace(/[^0-9]/g,"");
+        if(data.payee) document.getElementById("payee").value=data.payee;
+        if(data.bank) document.getElementById("bank").value=data.bank;
+        if(data.dueDate) document.getElementById("dueDate").value=normDate(data.dueDate);
+        if(data.memo) document.getElementById("memo").value=data.memo;
+        ai.innerHTML='<div class="ai" style="background:#D1FAE5;color:#047857">✓ AIが読み取りました。内容を確認・修正してください</div>';
+        if(pendingFileUrl) document.getElementById("fileLink").innerHTML='<div class="note">📎 保存済み：<a href="'+pendingFileUrl+'" target="_blank" style="color:var(--green-deep);font-weight:700">請求書を開く</a></div>';
+      }
+    }catch(e){}
+    if(tries>20){ clearInterval(poll); ai.innerHTML='<div class="ai" style="background:#FEF3C7;color:#92400E">読み取りに時間がかかっています。手入力でも申請できます</div>'; }
+  },1500);
+}
+function normDate(s){ s=String(s).trim(); const m=s.match(/(\d{4})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})/); if(m){return m[1]+"-"+("0"+m[2]).slice(-2)+"-"+("0"+m[3]).slice(-2);} return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:""; }
+
+/* ====== 申請 ====== */
+async function submitReq(){
+  const requester=val("requester"), amount=val("amount"), payee=val("payee");
+  if(!requester){ toast("お名前を入れてください"); return; }
+  if(!amount){ toast("金額を入れてください"); return; }
+  if(!gasUrl()){ document.getElementById("setup").style.display="block"; toast("先にGAS URLを設定してください"); return; }
+  localStorage.setItem("furikomi_name",requester);
+  const body={action:"add",requester,dept:val("dept"),amount,payee,bank:val("bank"),dueDate:val("dueDate"),memo:val("memo"),fileUrl:pendingFileUrl};
+  const btn=document.getElementById("submitBtn"); btn.disabled=true; btn.textContent="送信中…";
+  try{ await fetch(gasUrl(),{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)}); }catch(e){}
+  setTimeout(()=>{ btn.disabled=false; btn.textContent="この内容で申請する"; clearForm(); toast("申請しました"); show("list"); },1200);
+}
+function val(id){ return (document.getElementById(id).value||"").trim(); }
+function clearForm(){ ["amount","payee","bank","dueDate","memo"].forEach(id=>document.getElementById(id).value=""); pendingFileUrl=""; document.getElementById("aiStatus").innerHTML=""; document.getElementById("fileLink").innerHTML=""; document.getElementById("file").value=""; }
+
+/* ====== 一覧 ====== */
+let cache=[];
+async function loadList(){
+  if(!gasUrl()){ document.getElementById("setup").style.display="block"; document.getElementById("reqList").innerHTML='<div class="empty">GAS URLを設定すると表示されます</div>'; return; }
+  try{
+    const r=await fetch(gasUrl()+"?action=list"); const d=await r.json();
+    cache=(d.rows||[]).reverse(); render();
+  }catch(e){ document.getElementById("reqList").innerHTML='<div class="empty">読み込みに失敗しました</div>'; }
+}
+function setFilter(f){ filterVal=f; [...document.querySelectorAll("#filter button")].forEach(b=>b.classList.toggle("on",b.dataset.f===f)); render(); }
+function toggleKeiri(){
+  const on=document.getElementById("keiriToggle").checked;
+  if(on){ const p=prompt("経理モードの暗証番号を入力"); if(p!==KEIRI_PIN){ document.getElementById("keiriToggle").checked=false; toast("暗証番号が違います"); return; } }
+  keiri=document.getElementById("keiriToggle").checked;
+  document.getElementById("keiriWho").style.display=keiri?"block":"none";
+  render();
+}
+function badge(s){ if(s==="振込処理済")return'<span class="badge b-done">振込処理済</span>'; if(s==="経理確認")return'<span class="badge b-check">経理確認</span>'; return'<span class="badge b-apply">申請中</span>'; }
+function yen(n){ const x=String(n).replace(/[^0-9]/g,""); return x?("¥"+Number(x).toLocaleString()):"—"; }
+function fmt(s){ if(!s)return""; const d=new Date(s); if(isNaN(d))return s; return (d.getMonth()+1)+"/"+d.getDate(); }
+function render(){
+  const box=document.getElementById("reqList");
+  let list=cache.filter(r=>filterVal==="all"||r["状態"]===filterVal);
+  if(!list.length){ box.innerHTML='<div class="empty">該当する申請はありません</div>'; return; }
+  box.innerHTML=list.map(r=>{
+    const st=r["状態"]||"申請中"; const id=r["ID"];
+    let actions="";
+    if(keiri){
+      if(st==="申請中") actions='<button class="btn sm ghost" onclick="setStatus(\''+id+'\',\'経理確認\')">経理確認にする</button>';
+      else if(st==="経理確認") actions='<button class="btn sm" style="margin:0" onclick="setStatus(\''+id+'\',\'振込処理済\')">振込処理済にする</button>';
+    }
+    const file=r["請求書URL"]?'<a href="'+r["請求書URL"]+'" target="_blank" style="color:var(--green-deep);font-weight:700">📎 請求書</a>':'';
+    return '<div class="req"><div class="top"><span class="amt">'+yen(r["金額"])+'</span>'+badge(st)+'</div>'
+      +'<div class="meta"><span class="pill">'+(r["事業部"]||"")+'</span>申請者 <b>'+(r["申請者"]||"")+'</b></div>'
+      +'<div class="meta">振込先 <b>'+(r["振込先会社名"]||"—")+'</b>'+(r["支払期日"]?'　期日 <b>'+fmt(r["支払期日"])+'</b>':'')+'</div>'
+      +(r["銀行口座"]?'<div class="meta" style="color:#6B7280">'+r["銀行口座"]+'</div>':'')
+      +(r["メモ"]?'<div class="meta" style="color:#6B7280">'+r["メモ"]+'</div>':'')
+      +'<div class="meta" style="display:flex;align-items:center;gap:12px;margin-top:9px">'+file+(r["確認者"]?'<span class="note" style="margin:0">確認：'+r["確認者"]+'</span>':'')+'</div>'
+      +(actions?'<div style="margin-top:11px">'+actions+'</div>':'')
+      +'</div>';
+  }).join("");
+}
+async function setStatus(id,status){
+  const by=document.getElementById("whoSelect").value;
+  if(status==="振込処理済"&&!confirm("「振込処理済」にしますか？")) return;
+  const r=cache.find(x=>x["ID"]===id); if(r){ r["状態"]=status; r["確認者"]=by; render(); }
+  try{ await fetch(gasUrl(),{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"status",id,status,by})}); }catch(e){}
+  toast(status+"にしました"); setTimeout(loadList,1200);
+}
+
+/* ====== 初期化 ====== */
+(function init(){
+  document.getElementById("requester").value=localStorage.getItem("furikomi_name")||"";
+  if(!gasUrl()) document.getElementById("setup").style.display="block";
+  // ドラッグ&ドロップ
+  const drop=document.getElementById("drop");
+  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("on");}));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("on");}));
+  drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f){ const inp=document.getElementById("file"); const dt=new DataTransfer(); dt.items.add(f); inp.files=dt.files; onFile(inp);} });
+})();
+</script>
+</body>
+</html>
