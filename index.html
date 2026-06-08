@@ -121,10 +121,20 @@
           <select id="dept"><option>EC事業</option><option>古着事業</option><option>バルーン事業</option><option>その他</option></select>
         </div>
       </div>
-      <label>金額（円）</label><input id="amount" type="number" inputmode="numeric" placeholder="例：55000" />
+      <label>振込金額（円）</label><input id="amount" type="number" inputmode="numeric" placeholder="例：55000" />
       <label>振込先 会社名</label><input id="payee" placeholder="例：株式会社〇〇" />
-      <label>銀行口座（銀行・支店・種別・番号・名義）</label><textarea id="bank" placeholder="例：〇〇銀行 △△支店 普通 1234567 カ）〇〇"></textarea>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 5px">振込先 口座</div>
+      <div class="row">
+        <div><label style="margin-top:0">銀行名</label><input id="bankName" placeholder="〇〇銀行" /></div>
+        <div><label style="margin-top:0">支店名</label><input id="branch" placeholder="△△支店" /></div>
+      </div>
+      <div class="row">
+        <div style="flex:0 0 110px"><label>種別</label><select id="accountType"><option value="">選択</option><option>普通</option><option>当座</option></select></div>
+        <div><label>口座番号</label><input id="accountNo" inputmode="numeric" placeholder="1234567" /></div>
+      </div>
+      <label>口座名義</label><input id="holder" placeholder="カ）〇〇" />
       <label>支払期日</label><input id="dueDate" type="date" />
+      <label>インボイス番号</label><input id="invoiceNo" placeholder="T+13桁（なければ空欄でOK → 該当なし）" />
       <label>メモ（任意）</label><textarea id="memo" placeholder="件名・但し書きなど"></textarea>
       <div class="warn">⚠ AIの読み取りは間違うことがあります。<b>金額と口座番号は必ず目で確認</b>してから申請してください。</div>
       <button class="btn" id="submitBtn" onclick="submitReq()">この内容で申請する</button>
@@ -224,8 +234,13 @@ async function onFile(input){
         pendingFileUrl=res.fileUrl||"";
         if(data.amount) document.getElementById("amount").value=String(data.amount).replace(/[^0-9]/g,"");
         if(data.payee) document.getElementById("payee").value=data.payee;
-        if(data.bank) document.getElementById("bank").value=data.bank;
+        if(data.bankName) document.getElementById("bankName").value=data.bankName;
+        if(data.branch) document.getElementById("branch").value=data.branch;
+        if(data.accountType) document.getElementById("accountType").value=(String(data.accountType).indexOf("当座")>=0?"当座":"普通");
+        if(data.accountNo) document.getElementById("accountNo").value=String(data.accountNo).replace(/[^0-9]/g,"");
+        if(data.holder) document.getElementById("holder").value=data.holder;
         if(data.dueDate) document.getElementById("dueDate").value=normDate(data.dueDate);
+        document.getElementById("invoiceNo").value = data.invoiceNo ? data.invoiceNo : "該当なし";
         if(data.memo) document.getElementById("memo").value=data.memo;
         ai.innerHTML='<div class="ai" style="background:#D1FAE5;color:#047857">✓ AIが読み取りました。内容を確認・修正してください</div>';
         if(pendingFileUrl) document.getElementById("fileLink").innerHTML='<div class="note">📎 保存済み：<a href="'+pendingFileUrl+'" target="_blank" style="color:var(--green-deep);font-weight:700">請求書を開く</a></div>';
@@ -242,14 +257,16 @@ async function submitReq(){
   if(!requester){ toast("お名前を入れてください"); return; }
   if(!amount){ toast("金額を入れてください"); return; }
   if(!gasUrl()){ document.getElementById("setup").style.display="block"; toast("先にGAS URLを設定してください"); return; }
-  localStorage.setItem("furikomi_name",requester);
-  const body={action:"add",requester,dept:val("dept"),amount,payee,bank:val("bank"),dueDate:val("dueDate"),memo:val("memo"),fileUrl:pendingFileUrl};
+  localStorage.setItem("furikomi_name",requester); localStorage.setItem("furikomi_dept",val("dept"));
+  const bank=["bankName","branch","accountType","accountNo","holder"].map(id=>val(id)).filter(Boolean).join(" ");
+  const invoiceNo=val("invoiceNo")||"該当なし";
+  const body={action:"add",requester,dept:val("dept"),amount,payee,bank,invoiceNo,dueDate:val("dueDate"),memo:val("memo"),fileUrl:pendingFileUrl};
   const btn=document.getElementById("submitBtn"); btn.disabled=true; btn.textContent="送信中…";
   try{ await fetch(gasUrl(),{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)}); }catch(e){}
   setTimeout(()=>{ btn.disabled=false; btn.textContent="この内容で申請する"; clearForm(); toast("申請しました"); show("list"); },1200);
 }
 function val(id){ return (document.getElementById(id).value||"").trim(); }
-function clearForm(){ ["amount","payee","bank","dueDate","memo"].forEach(id=>document.getElementById(id).value=""); pendingFileUrl=""; document.getElementById("aiStatus").innerHTML=""; document.getElementById("fileLink").innerHTML=""; document.getElementById("file").value=""; }
+function clearForm(){ ["amount","payee","bankName","branch","accountType","accountNo","holder","dueDate","invoiceNo","memo"].forEach(id=>document.getElementById(id).value=""); pendingFileUrl=""; document.getElementById("aiStatus").innerHTML=""; document.getElementById("fileLink").innerHTML=""; document.getElementById("file").value=""; }
 
 /* ====== 一覧 ====== */
 let cache=[];
@@ -287,6 +304,7 @@ function render(){
       +'<div class="meta"><span class="pill">'+(r["事業部"]||"")+'</span>申請者 <b>'+(r["申請者"]||"")+'</b></div>'
       +'<div class="meta">振込先 <b>'+(r["振込先会社名"]||"—")+'</b>'+(r["支払期日"]?'　期日 <b>'+fmt(r["支払期日"])+'</b>':'')+'</div>'
       +(r["銀行口座"]?'<div class="meta" style="color:#6B7280">'+r["銀行口座"]+'</div>':'')
+      +(r["インボイス番号"]?'<div class="meta" style="color:#6B7280">インボイス：'+r["インボイス番号"]+'</div>':'')
       +(r["メモ"]?'<div class="meta" style="color:#6B7280">'+r["メモ"]+'</div>':'')
       +'<div class="meta" style="display:flex;align-items:center;gap:12px;margin-top:9px">'+file+(r["確認者"]?'<span class="note" style="margin:0">確認：'+r["確認者"]+'</span>':'')+'</div>'
       +(actions?'<div style="margin-top:11px">'+actions+'</div>':'')
@@ -303,7 +321,14 @@ async function setStatus(id,status){
 
 /* ====== 初期化 ====== */
 (function init(){
-  document.getElementById("requester").value=localStorage.getItem("furikomi_name")||"";
+  var qp=new URLSearchParams(location.search);
+  var nm=qp.get("name")||localStorage.getItem("furikomi_name")||"";
+  var dp=qp.get("dept")||localStorage.getItem("furikomi_dept")||"";
+  document.getElementById("requester").value=nm;
+  if(dp){ var sel=document.getElementById("dept"); var opt=[...sel.options].find(o=>o.value===dp||o.text===dp); if(opt) sel.value=opt.value; }
+  // 入力した名前・事業部を記憶（次回から自動表示）
+  document.getElementById("requester").addEventListener("input",function(){ localStorage.setItem("furikomi_name",this.value.trim()); });
+  document.getElementById("dept").addEventListener("change",function(){ localStorage.setItem("furikomi_dept",this.value); });
   if(!gasUrl()) document.getElementById("setup").style.display="block";
   // ドラッグ&ドロップ
   const drop=document.getElementById("drop");
