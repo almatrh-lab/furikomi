@@ -156,7 +156,7 @@
       <div class="drop" id="dropB" onclick="document.getElementById('batchFile').click()">
         <div class="big">📦</div>
         <div style="font-size:13.5px;font-weight:700;margin-top:6px">タップしてZIP・複数ファイルを選択</div>
-        <div class="note" style="margin-top:2px">ZIPでまとめて／画像を複数選択（一度に20枚まで）</div>
+        <div class="note" style="margin-top:2px">ZIPでまとめて／画像を複数選択（合計20件まで）。<b>2回目以降に選ぶと、今ある明細に追加</b>されます</div>
       </div>
       <input type="file" id="batchFile" accept="image/*,application/pdf,.zip" multiple style="display:none" onchange="onBatch(this)" />
       <div id="batchProg" style="display:none"></div>
@@ -269,18 +269,29 @@ async function gatherFiles(fileList){
 }
 async function onBatch(input){
   if(!gasUrl()){ document.getElementById("setup").style.display="block"; toast("先にGAS URLを設定してください"); return; }
+  if(batch.length>=20){ toast("すでに20件です。まず今の分を申請してから、追加してください"); input.value=""; return; }
   const prog=document.getElementById("batchProg");
   prog.style.display="block"; prog.innerHTML='<div class="ai"><span class="spin"></span>ファイルを展開中…</div>';
-  document.getElementById("batchReview").innerHTML="";
+  syncBatchFromInputs(); // ← 既存の明細に入力した内容を保持
   let files=await gatherFiles(input.files);
-  if(!files.length){ prog.style.display="none"; toast("画像・PDF・ZIPを選んでください"); return; }
-  if(files.length>20){ toast("一度に読み込めるのは20枚まで。先頭20枚を処理します"); files=files.slice(0,20); }
-  let done=0;
+  if(!files.length){ prog.style.display="none"; if(batch.length) renderBatch(); else prog.innerHTML=""; toast("画像・PDF・ZIPを選んでください"); return; }
+  const remain=20-batch.length;
+  if(files.length>remain){ toast("追加できるのは残り"+remain+"件まで。21件目以降は、今の分を申請してから追加してください"); files=files.slice(0,remain); }
   prog.innerHTML='<div class="ai"><span class="spin"></span>'+files.length+'件を読み取り中…（0/'+files.length+'）</div>';
   const results=await runPool(files, 3, (f)=>extractFile(f), (n)=>{ prog.innerHTML='<div class="ai"><span class="spin"></span>読み取り中…（'+n+'/'+files.length+'）</div>'; });
-  prog.innerHTML='<div class="ai" style="background:#D1FAE5;color:#047857">✓ '+files.length+'件を読み取りました。内容を確認して、まとめて申請してください</div>';
-  batch=results.map((r,i)=>({ idx:i, fileUrl:(r&&r.fileUrl)||"", data:(r&&r.data)||{}, include:true }));
+  results.forEach(r=> batch.push({ idx:0, fileUrl:(r&&r.fileUrl)||"", data:(r&&r.data)||{}, include:true }));
+  batch.forEach((b,i)=>b.idx=i); // 連番をふり直し
+  prog.innerHTML='<div class="ai" style="background:#D1FAE5;color:#047857">✓ 合計 '+batch.length+' 件になりました。続けて追加もできます（最大20件）。確認して、まとめて申請してください</div>';
+  input.value=""; // 同じファイルでも再選択できるように
   renderBatch();
+}
+function syncBatchFromInputs(){
+  const keys=["amount","payee","bankName","branch","accountType","accountNo","holder","dueDate","invoiceNo","memo"];
+  batch.forEach(b=>{
+    if(!document.getElementById("b_amount_"+b.idx)) return;
+    const d=b.data||(b.data={});
+    keys.forEach(k=>{ const el=document.getElementById("b_"+k+"_"+b.idx); if(el) d[k]=el.value; });
+  });
 }
 function runPool(items, size, worker, onProgress){
   return new Promise((resolve)=>{
