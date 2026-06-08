@@ -71,6 +71,7 @@
   .setup b{color:#92400E}
   .gaslogo{flex-shrink:0}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 <header>
@@ -97,6 +98,7 @@
 
   <div class="tabs">
     <button class="tab on" id="tab-new" onclick="show('new')">申請する</button>
+    <button class="tab" id="tab-batch" onclick="show('batch')">まとめて取り込み</button>
     <button class="tab" id="tab-list" onclick="show('list')">申請状況</button>
   </div>
 
@@ -141,6 +143,28 @@
     </div>
   </section>
 
+  <!-- まとめて取り込み -->
+  <section id="view-batch" style="display:none">
+    <div class="card">
+      <div class="row">
+        <div><label style="margin-top:0">申請者</label><input id="b_requester" placeholder="お名前" /></div>
+        <div><label style="margin-top:0">事業部</label>
+          <select id="b_dept"><option>EC事業</option><option>古着事業</option><option>バルーン事業</option><option>その他</option></select>
+        </div>
+      </div>
+      <label>ZIP または 複数の請求書（画像・PDF）／一度に最大20枚</label>
+      <div class="drop" id="dropB" onclick="document.getElementById('batchFile').click()">
+        <div class="big">📦</div>
+        <div style="font-size:13.5px;font-weight:700;margin-top:6px">タップしてZIP・複数ファイルを選択</div>
+        <div class="note" style="margin-top:2px">ZIPでまとめて／画像を複数選択（一度に20枚まで）</div>
+      </div>
+      <input type="file" id="batchFile" accept="image/*,application/pdf,.zip" multiple style="display:none" onchange="onBatch(this)" />
+      <div id="batchProg" style="display:none"></div>
+      <div class="warn">⚠ AIの読み取りは間違うことがあります。各明細の<b>金額・口座</b>は必ずご確認ください。</div>
+    </div>
+    <div id="batchReview"></div>
+  </section>
+
   <!-- 申請状況 -->
   <section id="view-list" style="display:none">
     <div class="keiri">
@@ -181,20 +205,24 @@ let pendingFileUrl = "", filterVal="all", keiri=false;
 
 /* ====== 表示切替 ====== */
 function show(v){
-  document.getElementById("view-new").style.display = v==="new"?"block":"none";
-  document.getElementById("view-list").style.display = v==="list"?"block":"none";
-  document.getElementById("tab-new").classList.toggle("on", v==="new");
-  document.getElementById("tab-list").classList.toggle("on", v==="list");
+  ["new","batch","list"].forEach(k=>{ document.getElementById("view-"+k).style.display=(v===k)?"block":"none"; document.getElementById("tab-"+k).classList.toggle("on", v===k); });
   if(v==="list") loadList();
+  if(v==="batch"){
+    var nm=localStorage.getItem("furikomi_name")||""; var dp=localStorage.getItem("furikomi_dept")||"";
+    var rq=document.getElementById("b_requester"); if(!rq.value) rq.value=nm;
+    if(dp){ var sel=document.getElementById("b_dept"); var o=[...sel.options].find(x=>x.value===dp||x.text===dp); if(o) sel.value=o.value; }
+  }
   window.scrollTo(0,0);
 }
 function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
 
-/* ====== 画像縮小 ====== */
-function downscale(file){
+/* ====== 画像縮小（mime/name 上書き対応） ====== */
+function downscale(file, mimeO, nameO){
+  const mime = mimeO || file.type || "";
+  const name = nameO || file.name || "invoice";
   return new Promise((resolve)=>{
-    if(file.type==="application/pdf"){ // PDFはそのまま
-      const r=new FileReader(); r.onload=()=>resolve({b64:r.result.split(",")[1],mime:file.type,name:file.name}); r.readAsDataURL(file); return;
+    if(mime==="application/pdf" || /\.pdf$/i.test(name)){
+      const r=new FileReader(); r.onload=()=>resolve({b64:r.result.split(",")[1],mime:"application/pdf",name}); r.readAsDataURL(file); return;
     }
     const img=new Image(); const r=new FileReader();
     r.onload=()=>{ img.onload=()=>{
@@ -203,13 +231,106 @@ function downscale(file){
       const c=document.createElement("canvas"); c.width=w; c.height=h;
       c.getContext("2d").drawImage(img,0,0,w,h);
       const url=c.toDataURL("image/jpeg",0.82);
-      resolve({b64:url.split(",")[1],mime:"image/jpeg",name:(file.name||"invoice")+".jpg"});
-    }; img.src=r.result; };
+      resolve({b64:url.split(",")[1],mime:"image/jpeg",name:(name||"invoice")+".jpg"});
+    }; img.onerror=()=>{ const r2=new FileReader(); r2.onload=()=>resolve({b64:r2.result.split(",")[1],mime:mime||"image/jpeg",name}); r2.readAsDataURL(file); }; img.src=r.result; };
     r.readAsDataURL(file);
   });
 }
 
-/* ====== ファイル選択 → 保存＆AI読み取り ====== */
+/* ====== まとめて取り込み（ZIP・複数） ====== */
+let batch=[];
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+function num(s){ return String(s==null?"":s).replace(/[^0-9]/g,""); }
+function mimeFromExt(n){ if(/\.png$/i.test(n))return"image/png"; if(/\.pdf$/i.test(n))return"application/pdf"; return"image/jpeg"; }
+function extractFile(file){
+  return new Promise(async (resolve)=>{
+    const id="X"+Date.now()+Math.floor(Math.random()*100000);
+    let pack; try{ pack=await downscale(file, file._mime, file._name); }catch(e){ resolve({fileUrl:"",data:{}}); return; }
+    try{ await fetch(gasUrl(),{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"extract",id,image:pack.b64,mime:pack.mime,filename:pack.name})}); }catch(e){}
+    let tries=0; const t=setInterval(async ()=>{
+      tries++;
+      try{ const r=await fetch(gasUrl()+"?action=extractResult&id="+id); const d=await r.json(); if(d&&d.ready){ clearInterval(t); resolve(d.result||{fileUrl:"",data:{}}); return; } }catch(e){}
+      if(tries>30){ clearInterval(t); resolve({fileUrl:"",data:{}}); }
+    },1500);
+  });
+}
+async function gatherFiles(fileList){
+  let out=[];
+  for(const f of fileList){
+    if(/\.zip$/i.test(f.name)||f.type==="application/zip"||f.type==="application/x-zip-compressed"){
+      try{
+        const zip=await JSZip.loadAsync(f);
+        const entries=Object.values(zip.files).filter(e=>!e.dir && /\.(jpe?g|png|pdf)$/i.test(e.name) && !/(^|\/)__MACOSX\//.test(e.name)).sort((a,b)=>a.name.localeCompare(b.name));
+        for(const e of entries){ const blob=await e.async("blob"); blob._name=e.name.split("/").pop(); blob._mime=mimeFromExt(e.name); out.push(blob); }
+      }catch(err){ toast("ZIPを読み込めませんでした"); }
+    } else if(/\.(jpe?g|png|pdf)$/i.test(f.name)||/^image\//.test(f.type)||f.type==="application/pdf"){ out.push(f); }
+  }
+  return out;
+}
+async function onBatch(input){
+  if(!gasUrl()){ document.getElementById("setup").style.display="block"; toast("先にGAS URLを設定してください"); return; }
+  const prog=document.getElementById("batchProg");
+  prog.style.display="block"; prog.innerHTML='<div class="ai"><span class="spin"></span>ファイルを展開中…</div>';
+  document.getElementById("batchReview").innerHTML="";
+  let files=await gatherFiles(input.files);
+  if(!files.length){ prog.style.display="none"; toast("画像・PDF・ZIPを選んでください"); return; }
+  if(files.length>20){ toast("一度に読み込めるのは20枚まで。先頭20枚を処理します"); files=files.slice(0,20); }
+  let done=0;
+  prog.innerHTML='<div class="ai"><span class="spin"></span>'+files.length+'件を読み取り中…（0/'+files.length+'）</div>';
+  const results=await runPool(files, 3, (f)=>extractFile(f), (n)=>{ prog.innerHTML='<div class="ai"><span class="spin"></span>読み取り中…（'+n+'/'+files.length+'）</div>'; });
+  prog.innerHTML='<div class="ai" style="background:#D1FAE5;color:#047857">✓ '+files.length+'件を読み取りました。内容を確認して、まとめて申請してください</div>';
+  batch=results.map((r,i)=>({ idx:i, fileUrl:(r&&r.fileUrl)||"", data:(r&&r.data)||{}, include:true }));
+  renderBatch();
+}
+function runPool(items, size, worker, onProgress){
+  return new Promise((resolve)=>{
+    let idx=0, done=0; const results=new Array(items.length);
+    function next(){
+      const i=idx++; if(i>=items.length){ if(done>=items.length) resolve(results); return; }
+      Promise.resolve(worker(items[i],i)).then((r)=>{ results[i]=r; done++; if(onProgress) onProgress(done); if(done>=items.length) resolve(results); else next(); });
+    }
+    for(let k=0;k<Math.min(size,items.length);k++) next();
+  });
+}
+function renderBatch(){
+  const box=document.getElementById("batchReview");
+  if(!batch.length){ box.innerHTML=""; return; }
+  box.innerHTML=batch.map(b=>{
+    const d=b.data||{};
+    const at=(String(d.accountType||"").indexOf("当座")>=0)?"当座":(d.accountType?"普通":"");
+    return '<div class="card" style="padding:14px">'
+     +'<label style="display:flex;align-items:center;gap:8px;margin:0 0 10px"><input type="checkbox" style="width:auto" '+(b.include?"checked":"")+' onchange="batch['+b.idx+'].include=this.checked"><b style="color:var(--ink);font-size:13px">明細 '+(b.idx+1)+'</b>'+(b.fileUrl?'<a href="'+b.fileUrl+'" target="_blank" style="color:var(--green-deep);font-weight:700;font-size:12px;margin-left:auto">📎 請求書</a>':'')+'</label>'
+     +'<div class="row"><div><label style="margin-top:0">振込金額（円）</label><input id="b_amount_'+b.idx+'" type="number" value="'+esc(num(d.amount))+'"></div><div><label style="margin-top:0">会社名</label><input id="b_payee_'+b.idx+'" value="'+esc(d.payee||"")+'"></div></div>'
+     +'<div class="row"><div><label>銀行名</label><input id="b_bankName_'+b.idx+'" value="'+esc(d.bankName||"")+'"></div><div><label>支店名</label><input id="b_branch_'+b.idx+'" value="'+esc(d.branch||"")+'"></div></div>'
+     +'<div class="row"><div style="flex:0 0 100px"><label>種別</label><select id="b_accountType_'+b.idx+'"><option value=""'+(at===""?" selected":"")+'>選択</option><option'+(at==="普通"?" selected":"")+'>普通</option><option'+(at==="当座"?" selected":"")+'>当座</option></select></div><div><label>口座番号</label><input id="b_accountNo_'+b.idx+'" value="'+esc(num(d.accountNo))+'"></div></div>'
+     +'<label>名義</label><input id="b_holder_'+b.idx+'" value="'+esc(d.holder||"")+'">'
+     +'<div class="row"><div><label>支払期日</label><input id="b_dueDate_'+b.idx+'" type="date" value="'+esc(normDate(d.dueDate||""))+'"></div><div><label>インボイス番号</label><input id="b_invoiceNo_'+b.idx+'" value="'+esc(d.invoiceNo||"")+'"></div></div>'
+     +'<label>メモ</label><input id="b_memo_'+b.idx+'" value="'+esc(d.memo||"")+'">'
+     +'</div>';
+  }).join("")
+   +'<button class="btn" id="batchSubmitBtn" onclick="submitBatch()">✓ チェックした件をまとめて申請</button>';
+}
+async function submitBatch(){
+  const requester=val("b_requester"), dept=val("b_dept");
+  if(!requester){ toast("申請者を入れてください"); return; }
+  const chosen=batch.filter(b=>b.include);
+  if(!chosen.length){ toast("申請する明細を選んでください"); return; }
+  localStorage.setItem("furikomi_name",requester); localStorage.setItem("furikomi_dept",dept);
+  const btn=document.getElementById("batchSubmitBtn"); btn.disabled=true; btn.textContent="送信中…（0/"+chosen.length+"）";
+  let n=0;
+  for(const b of chosen){
+    const bank=["bankName","branch","accountType","accountNo","holder"].map(k=>val("b_"+k+"_"+b.idx)).filter(Boolean).join(" ");
+    const body={action:"add",requester,dept,amount:val("b_amount_"+b.idx),payee:val("b_payee_"+b.idx),bank,invoiceNo:val("b_invoiceNo_"+b.idx)||"該当なし",dueDate:val("b_dueDate_"+b.idx),memo:val("b_memo_"+b.idx),fileUrl:b.fileUrl};
+    try{ await fetch(gasUrl(),{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)}); }catch(e){}
+    n++; btn.textContent="送信中…（"+n+"/"+chosen.length+"）";
+    await new Promise(r=>setTimeout(r,300));
+  }
+  toast(chosen.length+"件を申請しました");
+  batch=[]; document.getElementById("batchReview").innerHTML=""; document.getElementById("batchProg").style.display="none"; document.getElementById("batchFile").value="";
+  show("list");
+}
+
+/* ====== ファイル選択 → 保存＆AI読み取り（1枚） ====== */
 async function onFile(input){
   const f=input.files[0]; if(!f) return;
   if(!gasUrl()){ document.getElementById("setup").style.display="block"; toast("先にGAS URLを設定してください"); return; }
@@ -335,6 +456,10 @@ async function setStatus(id,status){
   ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("on");}));
   ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("on");}));
   drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f){ const inp=document.getElementById("file"); const dt=new DataTransfer(); dt.items.add(f); inp.files=dt.files; onFile(inp);} });
+  const dropB=document.getElementById("dropB");
+  ["dragenter","dragover"].forEach(ev=>dropB.addEventListener(ev,e=>{e.preventDefault();dropB.classList.add("on");}));
+  ["dragleave","drop"].forEach(ev=>dropB.addEventListener(ev,e=>{e.preventDefault();dropB.classList.remove("on");}));
+  dropB.addEventListener("drop",e=>{ const fs=e.dataTransfer.files; if(fs&&fs.length){ const inp=document.getElementById("batchFile"); const dt=new DataTransfer(); for(const f of fs) dt.items.add(f); inp.files=dt.files; onBatch(inp);} });
 })();
 </script>
 </body>
