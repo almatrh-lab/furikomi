@@ -279,7 +279,7 @@ async function onBatch(input){
   if(files.length>remain){ toast("追加できるのは残り"+remain+"件まで。21件目以降は、今の分を申請してから追加してください"); files=files.slice(0,remain); }
   prog.innerHTML='<div class="ai"><span class="spin"></span>'+files.length+'件を読み取り中…（0/'+files.length+'）</div>';
   const results=await runPool(files, 3, (f)=>extractFile(f), (n)=>{ prog.innerHTML='<div class="ai"><span class="spin"></span>読み取り中…（'+n+'/'+files.length+'）</div>'; });
-  results.forEach(r=> batch.push({ idx:0, fileUrl:(r&&r.fileUrl)||"", data:(r&&r.data)||{}, include:true }));
+  results.forEach(r=> batch.push({ idx:0, fileUrl:(r&&r.fileUrl)||"", data:mapExtract(r&&r.data), include:true }));
   batch.forEach((b,i)=>b.idx=i); // 連番をふり直し
   prog.innerHTML='<div class="ai" style="background:#D1FAE5;color:#047857">✓ 合計 '+batch.length+' 件になりました。続けて追加もできます（最大20件）。確認して、まとめて申請してください</div>';
   input.value=""; // 同じファイルでも再選択できるように
@@ -362,19 +362,23 @@ async function onFile(input){
       const d=await r.json();
       if(d&&d.ready){
         clearInterval(poll);
-        const res=d.result||{}; const data=res.data||{};
+        const res=d.result||{}; const data=mapExtract(res.data||{});
         pendingFileUrl=res.fileUrl||"";
-        if(data.amount) document.getElementById("amount").value=String(data.amount).replace(/[^0-9]/g,"");
-        if(data.payee) document.getElementById("payee").value=data.payee;
-        if(data.bankName) document.getElementById("bankName").value=data.bankName;
-        if(data.branch) document.getElementById("branch").value=data.branch;
-        if(data.accountType) document.getElementById("accountType").value=(String(data.accountType).indexOf("当座")>=0?"当座":"普通");
-        if(data.accountNo) document.getElementById("accountNo").value=String(data.accountNo).replace(/[^0-9]/g,"");
-        if(data.holder) document.getElementById("holder").value=data.holder;
-        if(data.dueDate) document.getElementById("dueDate").value=normDate(data.dueDate);
+        let filled=0;
+        if(data.amount){ document.getElementById("amount").value=String(data.amount).replace(/[^0-9]/g,""); filled++; }
+        if(data.payee){ document.getElementById("payee").value=data.payee; filled++; }
+        if(data.bankName){ document.getElementById("bankName").value=data.bankName; filled++; }
+        if(data.branch){ document.getElementById("branch").value=data.branch; filled++; }
+        if(data.accountType){ document.getElementById("accountType").value=(String(data.accountType).indexOf("当座")>=0?"当座":"普通"); filled++; }
+        if(data.accountNo){ document.getElementById("accountNo").value=String(data.accountNo).replace(/[^0-9]/g,""); filled++; }
+        if(data.holder){ document.getElementById("holder").value=data.holder; filled++; }
+        if(data.dueDate){ document.getElementById("dueDate").value=normDate(data.dueDate); filled++; }
         document.getElementById("invoiceNo").value = data.invoiceNo ? data.invoiceNo : "該当なし";
-        if(data.memo) document.getElementById("memo").value=data.memo;
-        ai.innerHTML='<div class="ai" style="background:#D1FAE5;color:#047857">✓ AIが読み取りました。内容を確認・修正してください</div>';
+        if(data.memo){ document.getElementById("memo").value=data.memo; filled++; }
+        // 1つも取り込めなかったら「✓読み取りました」と誤表示せず、正直に手入力を促す（#67）。
+        ai.innerHTML = filled>0
+          ? '<div class="ai" style="background:#D1FAE5;color:#047857">✓ AIが読み取りました。内容を確認・修正してください</div>'
+          : '<div class="ai" style="background:#FEF3C7;color:#92400E">読み取れた項目がありませんでした。お手数ですが手入力で申請してください（請求書は保存済みです）。</div>';
         if(pendingFileUrl) document.getElementById("fileLink").innerHTML='<div class="note">📎 保存済み：<a href="'+pendingFileUrl+'" target="_blank" style="color:var(--green-deep);font-weight:700">請求書を開く</a></div>';
       }
     }catch(e){}
@@ -382,6 +386,25 @@ async function onFile(input){
   },1500);
 }
 function normDate(s){ s=String(s).trim(); const m=s.match(/(\d{4})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})/); if(m){return m[1]+"-"+("0"+m[2]).slice(-2)+"-"+("0"+m[3]).slice(-2);} return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:""; }
+// #67：AI(GAS)が返すキー名が英/和・表記ゆれでも取りこぼさないよう別名を吸収して正規化する。
+//  これまでは data.amount/payee/... の固定キーだけを見ており、GASが companyName/bank/金額 等で返すと
+//  「読み取りはされるがフォームに入らない」状態になっていた。
+function mapExtract(raw){
+  const d=raw||{};
+  const pick=(...ks)=>{ for(const k of ks){ const v=d[k]; if(v!=null && String(v).trim()!=="") return v; } return ""; };
+  return {
+    amount: pick("amount","total","totalAmount","sum","金額","請求金額","合計","合計金額","振込金額","お支払金額"),
+    payee: pick("payee","company","companyName","payeeName","vendor","供給者","会社名","振込先","取引先","請求元","発行者"),
+    bankName: pick("bankName","bank","bank_name","銀行名","銀行"),
+    branch: pick("branch","branchName","branch_name","支店名","支店"),
+    accountType: pick("accountType","account_type","type","種別","預金種別","口座種別"),
+    accountNo: pick("accountNo","accountNumber","account_no","accountNum","口座番号","口座No"),
+    holder: pick("holder","accountHolder","account_name","name","口座名義","名義","フリガナ"),
+    dueDate: pick("dueDate","due_date","paymentDate","支払期日","期日","支払日","振込期日"),
+    invoiceNo: pick("invoiceNo","invoiceNumber","invoice_no","registrationNumber","インボイス番号","登録番号","適格請求書番号"),
+    memo: pick("memo","note","remarks","備考","メモ"),
+  };
+}
 
 /* ====== 申請 ====== */
 async function submitReq(){
